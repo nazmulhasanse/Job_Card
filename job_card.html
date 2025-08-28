@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Job Card</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+    }
+
+    .report-box {
+      border: 1px solid #000;
+      padding: 10px;
+    }
+
+    .header {
+      text-align: center;
+      font-weight: bold;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 10px;
+    }
+
+    table,
+    th,
+    td {
+      border: 1px solid black;
+    }
+
+    th,
+    td {
+      padding: 5px;
+      text-align: center;
+    }
+
+    .summary {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .footer {
+      margin-top: 20px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    @media print {
+      @page {
+        size: A4 portrait;
+        /* or landscape */
+        margin: 10mm;
+        /* adjust margins */
+      }
+
+      body {
+        zoom: 90%;
+        /* scale down to fit in one page */
+      }
+
+      .no-print {
+        display: none !important;
+        /* hide buttons/file input */
+      }
+
+      .report-box {
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="report-box">
+    <div class="header">
+      <strong>Good and Fast Packaging Co. Ltd.</strong><br>
+      Plot-1425, Laskarchala, Haturiachal, Kaliakair, Gazipur, Bangladesh <br>
+      <strong>Job Card Report</strong>
+    </div>
+
+    <p>Date Range: <span id="dateRange"></span></p>
+    <p>Employee Id: <span id="empId"></span></p>
+    <p>Name: <span id="empName"></span></p>
+    <p>Designation: <span id="designation"></span></p>
+    <p>Department: <span id="section"></span></p>
+    <p>Joining Date: <span id="joiningDate"></span></p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Shift</th>
+          <th>In Time</th>
+          <th>Out Time</th>
+          <th>Late</th>
+          <th>E.Exit</th>
+          <th>Status</th>
+          <th>OT</th>
+          <th>N.Status</th>
+          <th>T.Status</th>
+          <th>Remarks</th>
+        </tr>
+      </thead>
+      <tbody id="reportData"></tbody>
+    </table>
+
+    <!-- Footer summary -->
+    <div class="summary">
+      <div>Present: <span id="present"></span></div>
+      <div>Absent: <span id="absent"></span></div>
+      <div>Leave: <span id="leave"></span></div>
+      <div>Weekend: <span id="weekend"></span></div>
+      <div>Holiday: <span id="holiday"></span></div>
+      <div>Total Day: <span id="totalDay"></span></div>
+      <div>Late Min: <span id="lateMin"></span></div>
+      <div>Total OT: <span id="totalOT"></span></div>
+      <div>E.Duty Min: <span id="edutyMin"></span></div>
+    </div>
+
+    <div class="footer">
+      <div>______________________<br>Signature of Employee</div>
+      <div>______________________<br>Authorized Signature</div>
+    </div>
+    <!-- <div style="text-align: center;">
+      __________________________________________________________________________________________________<br>Status
+      Legend: P-Present, A-Absent, W-Weekly Holiday, H-Holiday, CL-Casual Leave, SL-Sick Leave, EL-Earn Leave
+    </div> -->
+  </div>
+
+
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script>
+    function loadExcel(event) {
+      let file = event.target.files[0];
+      let reader = new FileReader();
+      reader.onload = function (e) {
+        let data = new Uint8Array(e.target.result);
+        let workbook = XLSX.read(data, { type: 'array' });
+
+        let sheet = workbook.Sheets[workbook.SheetNames[0]];
+        let rows = XLSX.utils.sheet_to_json(sheet);
+
+        if (rows.length === 0) return;
+
+        // Employee Info
+        let first = rows[0];
+        document.getElementById("empId").innerText = first["Employee Id"] || "";
+        document.getElementById("empName").innerText = first["Employee Name"] || "";
+        document.getElementById("designation").innerText = first.Designation || "";
+        document.getElementById("section").innerText = first.Department || "";
+        document.getElementById("joiningDate").innerText = first.JoiningDate || "";
+
+        // Date Range
+        let startDate = rows[0].Date;
+        let endDate = rows[rows.length - 1].Date;
+        document.getElementById("dateRange").innerText = startDate + " - " + endDate;
+
+        // Fill Table
+        let tbody = document.getElementById("reportData");
+        tbody.innerHTML = "";
+
+        // Summary counters
+        let present = 0, absent = 0, leave = 0, weekend = 0, holiday = 0;
+        let lateMin = 0, totalOT = 0, edutyMin = 0;
+
+        rows.forEach(r => {
+          tbody.innerHTML += `
+            <tr>
+              <td>${r.Date || ''}</td>
+              <td>${r["Shift(s)"] || ''}</td>
+              <td>${time(r["Check-in"]) || ''}</td>
+              <td>${time(r["Check-out"]) || ''}</td>
+              <td>${r["Late Entry"] || ''}</td>
+              <td>${r["Early Exit"] || ''}</td>
+              <td>${r.Status || ''}</td>
+              <td>${r["Overtime"] || ''}</td>
+              <td>${r["N.Status"] || ''}</td>
+              <td>${r["T.Status"] || ''}</td>
+              <td>${r.Remarks || ''}</td>
+            </tr>`;
+
+          // Summaries
+          switch (r.Status) {
+            case "Present": present++; break;
+            case "Absent": absent++; break;
+            case "L": leave++; break;
+            case "Weekend, 0.5 day Present": weekend++; break;
+            case "Weekend": weekend++; break;
+            case "H": holiday++; break;
+          }
+
+          lateMin += toMinutes(r["Late Entry"]) || 0;
+          totalOT += toMinutes(r["Overtime"]) || 0;
+          edutyMin += toMinutes(r["Early Exit"]) || 0;
+        });
+
+        // Fill Footer
+        document.getElementById("present").innerText = present;
+        document.getElementById("absent").innerText = absent;
+        document.getElementById("leave").innerText = leave;
+        document.getElementById("weekend").innerText = weekend;
+        document.getElementById("holiday").innerText = holiday;
+        document.getElementById("totalDay").innerText = rows.length;
+        document.getElementById("lateMin").innerText = toHHMM(lateMin);
+        document.getElementById("totalOT").innerText = toHHMM(totalOT);
+        document.getElementById("edutyMin").innerText = toHHMM(edutyMin);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // Helper function to extract only time part
+    function time(val) {
+      if (!val) return "--:--";
+
+      // Case 1: String like "2025-07-01 20:59"
+      if (typeof val === "string" && val.includes(" ")) {
+        let t = val.split(" ")[1];
+        return t || "--:--";
+      }
+
+      // Case 2: Excel numeric datetime
+      if (typeof val === "number") {
+        let date = XLSX.SSF.parse_date_code(val);
+        if (date) {
+          let h = String(date.H).padStart(2, "0");
+          let m = String(date.M).padStart(2, "0");
+          return `${h}:${m}`;
+        }
+        return "--:--";
+      }
+
+      // Case 3: Try Date object
+      try {
+        let d = new Date(val);
+        let h = String(d.getHours()).padStart(2, "0");
+        let m = String(d.getMinutes()).padStart(2, "0");
+        if (isNaN(h) || isNaN(m)) return "--:--";
+        return `${h}:${m}`;
+      } catch {
+        return "--:--";
+      }
+    }
+
+    function toMinutes(timeStr) {
+      if (!timeStr) return 0;
+      let parts = timeStr.split(":");
+      if (parts.length !== 2) return 0;
+      let h = parseInt(parts[0]) || 0;
+      let m = parseInt(parts[1]) || 0;
+      return (h * 60) + m;
+    }
+
+    // Convert total minutes back to "HH:mm"
+    function toHHMM(totalMinutes) {
+      let h = Math.floor(totalMinutes / 60);
+      let m = totalMinutes % 60;
+      return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+    }
+
+  </script>
+
+  <!-- <input type="file" accept=".xlsx,.xls" onchange="loadExcel(event)"> -->
+  <br>
+  <div class="no-print">
+    <input type="file" accept=".xlsx,.xls" onchange="loadExcel(event)">
+    <button onclick="window.print()">Print Report</button>
+  </div>
+</body>
+
+</html>
